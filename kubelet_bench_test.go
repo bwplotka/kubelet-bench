@@ -3,7 +3,6 @@ package kubelet_bench
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -87,9 +86,8 @@ func TestKubeletMetrics_E2e(t *testing.T) {
 			case <-time.After(1 * time.Second):
 			}
 
-			start := time.Now()
-			respSize := callMetricEndpoint(t, cl, kubelet)
-			fmt.Println("Called metric endpoint, response size:", respSize, "call latency:", time.Since(start))
+			callMetricEndpoint(t, cl, kubelet)
+			// fmt.Println("Called metric endpoint, response size:", respSize, "call latency:", time.Since(start))
 		}
 	}()
 
