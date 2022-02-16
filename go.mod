@@ -3,7 +3,7 @@ module github.com/bwplotka/kubelet-bench
 go 1.17
 
 require (
-	github.com/efficientgo/e2e v0.11.2-0.20220215200520-b54dd86e60d3
+	github.com/efficientgo/e2e v0.11.2-0.20220216121014-90471576b755
 	github.com/efficientgo/tools/core v0.0.0-20210829154005-c7bad8450208
 )
 
