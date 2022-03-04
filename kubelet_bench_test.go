@@ -41,7 +41,7 @@ func TestKubeletMetrics_E2e(t *testing.T) {
 	// On my local machine this modest 932996 (~1MB) bytes of /cadvisor/metrics response.
 	kubelet := e2e.NewInstrumentedRunnable(e, "kubelet").
 		WithPorts(map[string]int{"http": 10250}, "http").
-		WithMetricScheme("https"). // Gather /metrics for process performance (this is different to tested /metrics/cadvisor.
+		WithMetricScheme("https"). // Gather /metrics for process performance (this is different to tested /metrics/cadvisor)
 		Init(e2e.StartOptions{
 			Image: "kubelet:latest",
 			Command: e2e.NewCommand("",
@@ -58,7 +58,6 @@ func TestKubeletMetrics_E2e(t *testing.T) {
 				"/var/lib/docker/:/var/lib/docker:ro",
 			},
 		})
-	testutil.Ok(t, e2e.StartAndWaitReady(kubelet))
 
 	// Wait for things to warm up.
 	time.Sleep(5 * time.Second)
@@ -69,7 +68,6 @@ func TestKubeletMetrics_E2e(t *testing.T) {
 	cl := &http.Client{Transport: tr}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
@@ -77,24 +75,26 @@ func TestKubeletMetrics_E2e(t *testing.T) {
 		wg.Wait()
 	}()
 
-	// Create go routine that will test kubelet efficiency under consistent calls from potential Prometheus-es in the system, every 1 second.
+	// Create go routines that will test kubelet efficiency under consistent calls from potential Prometheus-es in the system, every 1 second.
 	// This is obviously an exaggeration. Normally kubelet is probably asked on average every 15 / 2 seconds, given typical 2 replica Prometheus setup.
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(1 * time.Second):
-			}
+	for _, runnable := range []e2e.Runnable{kubelet} {
+		wg.Add(1)
+		go func(runnable e2e.Runnable) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(1 * time.Second):
+				}
 
-			callMetricEndpoint(t, cl, kubelet)
-			// fmt.Println("Called metric endpoint, response size:", respSize, "call latency:", time.Since(start))
-		}
-	}()
+				callMetricEndpoint(t, cl, runnable)
+			}
+		}(runnable)
+	}
 
 	// Open monitoring page with kubelet performance metrics.
-	testutil.Ok(t, mon.OpenUserInterfaceInBrowser("/graph?g0.expr=rate(container_cpu_usage_seconds_total%7Bname%3D\"kubeletbench-kubelet\"%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=30m&g1.expr=container_memory_working_set_bytes%7Bname%3D\"kubeletbench-kubelet\"%7D&g1.tab=0&g1.stacked=0&g1.range_input=30m&g2.expr=rate(go_gc_heap_allocs_bytes_total%5B1m%5D)&g2.tab=0&g2.stacked=0&g2.range_input=30m&g3.expr=go_memstats_alloc_bytes%7Bjob%3D\"kubelet\"%7D&g3.tab=0&g3.stacked=0&g3.range_input=1h"))
+	testutil.Ok(t, mon.OpenUserInterfaceInBrowser("/graph?g0.expr=rate(container_cpu_usage_seconds_total%7Bname%3D~\"kubeletbench-kubelet.*\"%7D%5B1m%5D)&g0.tab=0&g0.stacked=0&g0.range_input=30m&g1.expr=container_memory_working_set_bytes%7Bname%3D~\"kubeletbench-kubelet.*\"%7D&g1.tab=0&g1.stacked=0&g1.range_input=30m&g2.expr=rate(go_gc_heap_allocs_bytes_total%5B1m%5D)&g2.tab=0&g2.stacked=0&g2.range_input=30m&g3.expr=go_memstats_alloc_bytes%7Bjob%3D~\"kubelet.*\"%7D&g3.tab=0&g3.stacked=0&g3.range_input=1h"))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }
 
